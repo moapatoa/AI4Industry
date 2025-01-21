@@ -23,6 +23,7 @@ def detect_contour_with_bubbles(image, threshold=12, max_iterations=1000, visual
     
     # Masque pour stocker les contours
     mask = np.zeros((h, w), dtype=np.uint8)
+    full_mask = np.zeros((h, w), dtype=np.uint8)
     
     # Image de visualisation (pour dessiner les bulles en couleur)
     vis_image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
@@ -56,10 +57,12 @@ def detect_contour_with_bubbles(image, threshold=12, max_iterations=1000, visual
                 # Si la différence est au-dessus du seuil, on considère qu'on a touché un obstacle
                 if diff > threshold:
                     mask[ny, nx] = 255  # Marquer ce point comme un contour
+                    full_mask[ny, nx] = 255
                     vis_image[ny, nx] = (0, 0, 255)  # Dessiner en rouge
                 else:
                     # Ajouter ce pixel comme nouvelle position de la bulle
                     new_bubbles.append((ny, nx))
+                    full_mask[ny, nx] = 255
                     vis_image[ny, nx] = (0, 255, 0)  # Dessiner en vert
                 
                 visited.add((ny, nx))
@@ -81,7 +84,32 @@ def detect_contour_with_bubbles(image, threshold=12, max_iterations=1000, visual
         cv2.waitKey(0)
         cv2.destroyAllWindows()
     
-    return mask
+    return full_mask
+
+def HOUGH(image):
+    circles = cv2.HoughCircles(
+        image,                 # Image d'entrée (les contours détectés)
+        cv2.HOUGH_GRADIENT,           # Méthode
+        dp=1,                         # Résolution de l'accumulateur inversement proportionnelle
+        minDist=300,                   # Distance minimale entre les centres des cercles
+        param1=50,                    # Gradient pour le canny edge
+        param2=30,                    # Seuil pour le centre du cercle
+        minRadius=100,                  # Rayon minimal du cercle
+        maxRadius=1000                  # Rayon maximal du cercle
+        )
+    # Vérifier si des cercles ont été détectés
+    if circles is not None:
+        circles = np.uint16(np.around(circles))  # Arrondir les valeurs des cercles
+        for i in circles[0, :]:
+            # Dessiner le cercle
+            cv2.circle(image, (i[0], i[1]), i[2], (0, 255, 0), 2)  # Cercle en vert
+            # Dessiner le centre
+            cv2.circle(image, (i[0], i[1]), 2, (0, 0, 255), 3)     # Centre en rouge
+
+    # Afficher l'image avec les cercles détectés
+    cv2.imshow("Cercles détectés", image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
 
 video_path = "Videos\P1_24h_01top.wmv"
@@ -100,7 +128,11 @@ if not ret:
 previous_frame = cv2.cvtColor(previous_frame, cv2.COLOR_BGR2GRAY)
 
 # Appliquer la détection de contour avec bulles
-contour_mask = detect_contour_with_bubbles(previous_frame, threshold=1)
+contour_mask = detect_contour_with_bubbles(previous_frame, threshold=1, visualize=True)
+
+cv2.imshow("Masque entier", contour_mask)
+
+HOUGH(contour_mask)
 
 cv2.waitKey(0)
 cv2.destroyAllWindows()
