@@ -1,5 +1,88 @@
 import cv2
+import numpy as np
 from collections import deque
+import time
+
+
+def detect_contour_with_bubbles(image, threshold=12, max_iterations=1000, visualize=True):
+    """
+    Détecte les contours en simulant des bulles qui gonflent jusqu'à rencontrer des obstacles.
+    Affiche visuellement la croissance des bulles si `visualize` est True.
+    
+    Arguments :
+    - image : Image d'entrée en niveaux de gris (numpy array 2D).
+    - threshold : Seuil pour détecter les changements de couleur (matière).
+    - max_iterations : Nombre maximal d'itérations pour la croissance des bulles.
+    - visualize : Booléen indiquant si la croissance des bulles doit être affichée.
+    
+    Retour :
+    - mask : Masque binaire avec les contours détectés.
+    """
+    # Dimensions de l'image
+    h, w = image.shape
+    
+    # Masque pour stocker les contours
+    mask = np.zeros((h, w), dtype=np.uint8)
+    
+    # Image de visualisation (pour dessiner les bulles en couleur)
+    vis_image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+    
+    # Liste des bulles (initialisées au centre de l'image ou sur une grille)
+    bubbles = [(430, 300), (430, 900)]  # Une seule bulle initiale au centre
+    visited = set(bubbles)       # Ensemble pour éviter de revisiter les mêmes pixels
+    
+    # Directions pour expansion des bulles (haut, bas, gauche, droite, et diagonales)
+    directions = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
+    
+    for iteration in range(max_iterations):
+        new_bubbles = []
+        
+        # Faire croître chaque bulle
+        for y, x in bubbles:
+            for dy, dx in directions:
+                ny, nx = y + dy, x + dx
+                
+                # Vérifier les limites de l'image
+                if ny < 0 or ny >= h or nx < 0 or nx >= w:
+                    continue
+                
+                # Vérifier si ce pixel a déjà été visité
+                if (ny, nx) in visited:
+                    continue
+                
+                # Calculer la différence de couleur (gradient local)
+                diff = abs(int(image[ny, nx]) - int(image[y, x]))
+                
+                # Si la différence est au-dessus du seuil, on considère qu'on a touché un obstacle
+                if diff > threshold:
+                    mask[ny, nx] = 255  # Marquer ce point comme un contour
+                    vis_image[ny, nx] = (0, 0, 255)  # Dessiner en rouge
+                else:
+                    # Ajouter ce pixel comme nouvelle position de la bulle
+                    new_bubbles.append((ny, nx))
+                    vis_image[ny, nx] = (0, 255, 0)  # Dessiner en vert
+                
+                visited.add((ny, nx))
+        
+        # Mettre à jour la liste des bulles
+        bubbles = new_bubbles
+        
+        # Visualiser la croissance des bulles
+        if visualize:
+            cv2.imshow("Croissance des bulles", vis_image)
+            cv2.waitKey(1)  # Petite pause pour rendre l'animation visible
+        
+        # Arrêter si plus aucune bulle ne peut croître
+        if not bubbles:
+            break
+
+    if visualize:
+        # Attendre avant de fermer
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+    
+    return mask
+
 
 video_path = "Videos\P1_24h_01top.wmv"
 cap = cv2.VideoCapture(video_path)
@@ -15,6 +98,13 @@ if not ret:
 
 # Convertir en niveaux de gris
 previous_frame = cv2.cvtColor(previous_frame, cv2.COLOR_BGR2GRAY)
+
+# Appliquer la détection de contour avec bulles
+contour_mask = detect_contour_with_bubbles(previous_frame, threshold=1)
+
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+
 
 # Paramètres du buffer
 buffer_size = 5  # Nombre de frames à conserver dans le batch
