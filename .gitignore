@@ -1,1 +1,9 @@
 Videos/
+Images/
+
+.venv
+.gitignore
+
+*__pycache__/
+*~
+

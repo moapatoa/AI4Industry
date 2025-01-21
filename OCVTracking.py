@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 # Load the video
-cap = cv2.VideoCapture('Videos\P1_24h_01top.wmv')
+cap = cv2.VideoCapture('./Videos/P1_24h_01top.wmv')
 
 # Parameters for ShiTomasi corner detection
 feature_params = dict(maxCorners=100, qualityLevel=0.3, minDistance=7, blockSize=7)
@@ -21,7 +21,7 @@ p0 = cv2.goodFeaturesToTrack(old_gray, mask=None, **feature_params)
 # Create a mask image for drawing purposes
 mask = np.zeros_like(old_frame)
 
-while True:
+while cap.isOpened():
     ret, frame = cap.read()
     if not ret:
         break
@@ -42,9 +42,9 @@ while True:
         a, b, c, d = int(a), int(b), int(c), int(d)
         mask = cv2.line(mask, (a, b), (c, d), color[i].tolist(), 2)
         frame = cv2.circle(frame, (a, b), 5, color[i].tolist(), -1)
-    img = cv2.add(frame, mask)
+        img = cv2.add(frame, mask)
 
-    cv2.imshow('frame', img)
+        cv2.imshow('frame', img)
     if cv2.waitKey(30) & 0xFF == 27:
         break
 
