@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 # Load the video
-cap = cv2.VideoCapture('path_to_your_video.wmv')
+cap = cv2.VideoCapture('Videos\P1_24h_01top.wmv')
 
 # Parameters for ShiTomasi corner detection
 feature_params = dict(maxCorners=100, qualityLevel=0.3, minDistance=7, blockSize=7)
@@ -28,7 +28,8 @@ while True:
     frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     # Calculate optical flow
-    p1, st, err = cv2.calcOpticalFlowPyrLK(old_gray, frame_gray, p0, None, **lk_params)
+    p1, st, err = cv2.calcOpticalFlowPyrLK(old_frame, frame, p0, None, **lk_params)
+#    p1, st, err = cv2.calcOpticalFlowPyrLK(old_gray, frame_gray, p0, None, **lk_params)
 
     # Select good points
     good_new = p1[st == 1]
@@ -38,6 +39,7 @@ while True:
     for i, (new, old) in enumerate(zip(good_new, good_old)):
         a, b = new.ravel()
         c, d = old.ravel()
+        a, b, c, d = int(a), int(b), int(c), int(d)
         mask = cv2.line(mask, (a, b), (c, d), color[i].tolist(), 2)
         frame = cv2.circle(frame, (a, b), 5, color[i].tolist(), -1)
     img = cv2.add(frame, mask)
