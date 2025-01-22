@@ -128,7 +128,7 @@ if not ret:
 previous_frame = cv2.cvtColor(previous_frame, cv2.COLOR_BGR2GRAY)
 
 # Appliquer la détection de contour avec bulles
-contour_mask = detect_contour_with_bubbles(previous_frame, threshold=1, visualize=True)
+contour_mask = detect_contour_with_bubbles(previous_frame, threshold=1, visualize=False)
 
 cv2.imshow("Masque entier", contour_mask)
 

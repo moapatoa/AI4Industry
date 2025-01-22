@@ -7,3 +7,23 @@ Images/
 *__pycache__/
 *~
 
+SAM/assets/
+SAM/demo
+SAM/images/
+SAM/models/
+SAM/notebooks/
+SAM/scripts/
+SAM/segment_anything/
+SAM/segment_anything.egg-info/
+SAM/.flake8
+SAM/.gitignore
+SAM/CODE_OF_CONDUCT.md
+SAM/CONTRIBUTING.md
+SAM/LICENSE
+SAM/README.md
+SAM/linter.sh
+SAM/setup.cfg
+SAM/setup.py
+SAM/segment-anything-main.zip
+
+Yolo/
