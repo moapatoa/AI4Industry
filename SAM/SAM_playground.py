@@ -45,8 +45,8 @@ image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
 from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
 
-sam_checkpoint = "D:\\Scolaire\\Travail\\ENSC_3A\\AI4Industry\\SAM\\models\\sam_vit_h_4b8939.pth"
-model_type = "vit_h"
+sam_checkpoint = "D:\\Scolaire\\Travail\\ENSC_3A\\AI4Industry\\SAM\\models\\sam_vit_b_01ec64.pth"
+model_type = "vit_b"
 
 device = "cuda"
 
