@@ -17,7 +17,7 @@ sam.to(device)
 predictor = SamPredictor(sam)
 
 # Charger la vidéo
-video_path = "D:\\Scolaire\\Travail\\ENSC_3A\\AI4Industry\\Videos\\P1_24h_01top_r.mp4"
+video_path = "D:\\Scolaire\\Travail\\ENSC_3A\\AI4Industry\\Videos\\P1_48h_02mid.wmv"
 cap = cv2.VideoCapture(video_path)
 
 # Vérifier si la vidéo s'ouvre correctement
@@ -26,141 +26,110 @@ if not cap.isOpened():
     exit()
 
 # Obtenez les dimensions de la vidéo d'entrée
-frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) // 2  # Si redimensionné
-frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) // 2  # Si redimensionné
+frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 fps = int(cap.get(cv2.CAP_PROP_FPS))
 
 # Définissez le codec et créez l'objet VideoWriter
-output_path = "D:\\Scolaire\\Travail\\ENSC_3A\\AI4Industry\\OutVideos\\P1_24h_01top.avi"
+output_path = "D:\\Scolaire\\Travail\\ENSC_3A\\AI4Industry\\OutVideos\\P1_48h_02mid.avi"
 fourcc = cv2.VideoWriter_fourcc(*'XVID')  # Codec pour AVI
 out = cv2.VideoWriter(output_path, fourcc, fps, (frame_width, frame_height))
 
 
-# Paramètres
-buffer_size = 3  # Nombre de frames à comparer dans le batch
-trajectory_length = 6  # Nombre de frames pendant lesquelles la trace persiste
-max_disappearance = 10  # Nombre maximum de frames où un objet peut "disparaître"
-max_area = 50000  # Aire maximale des masques pour les objets suivis
-frame_buffer = deque(maxlen=buffer_size)  # Buffer circulaire pour les frames
-objects = {}  # Dictionnaire des objets suivis : ID -> {position, disparition, trajectoire}
-next_object_id = 0  # ID unique pour chaque objet détecté
-
-# Fonction pour trouver le centre d'un rectangle
-def get_center(x, y, w, h):
-    return (x + w // 2, y + h // 2)
-
-# Fonction pour calculer la distance euclidienne
-def euclidean_distance(p1, p2):
-    return np.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+# Prétraitement des frames précédentes pour détecter les mouvements
+prev_frame = None
+persistent_masks = []  # Liste pour stocker les masques persistants
 
 while cap.isOpened():
-    # Lire la frame suivante
-    ret, current_frame = cap.read()
+    ret, frame = cap.read()
     if not ret:
         break
 
-    # Convertir en niveaux de gris
-    current_frame_gray = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY)
+    # Convertir en niveaux de gris pour détecter les mouvements
+    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blurred_frame = cv2.GaussianBlur(gray_frame, (5, 5), 0)
 
-    # Ajouter la frame actuelle au buffer
-    frame_buffer.append(current_frame_gray)
+    if prev_frame is None:
+        prev_frame = blurred_frame
+        continue
 
-    # Si le buffer est plein, comparer les frames
-    if len(frame_buffer) == buffer_size:
-        # Calculer les différences cumulées entre toutes les frames du buffer
-        diff_sum = None
-        for i in range(1, buffer_size):
-            diff = cv2.absdiff(frame_buffer[i - 1], frame_buffer[i])
-            if diff_sum is None:
-                diff_sum = diff
-            else:
-                diff_sum = cv2.bitwise_or(diff_sum, diff)
+    # Détection de mouvement (différence entre frames)
+    diff_frame = cv2.absdiff(prev_frame, blurred_frame)
+    _, thresh = cv2.threshold(diff_frame, 30, 255, cv2.THRESH_BINARY)
 
-        # Appliquer un seuillage sur la somme des différences
-        _, thresh = cv2.threshold(diff_sum, 8, 255, cv2.THRESH_BINARY)
+    # Trouver les contours des zones en mouvement
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    points_of_interest = []
+    
+    for contour in contours:
+        # Filtrer les contours par taille
+        if 1 < cv2.contourArea(contour) < 100:
+            (x, y, w, h) = cv2.boundingRect(contour)
+            points_of_interest.append((x + w // 2, y + h // 2))  # Centre du contour
 
-        # Trouver les contours des zones en mouvement
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # Convertir la frame en RGB pour SAM
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    predictor.set_image(rgb_frame)
 
-        # Générer les masques avec SAM pour la frame actuelle
-        input_frame = cv2.cvtColor(current_frame, cv2.COLOR_BGR2RGB)
-        predictor.set_image(input_frame)
-        masks, _, _ = predictor.predict(
-            point_coords=None,
-            point_labels=None,
-            multimask_output=True,
+    if points_of_interest:
+        point_coords = np.array(points_of_interest)
+        point_labels = np.ones(len(point_coords))  # Tous les points sont positifs
+
+        # SAM : segmentation guidée par points
+        masks, scores, logits = predictor.predict(
+            point_coords=point_coords,
+            point_labels=point_labels,
+            multimask_output=False
         )
 
-        # Filtrer les masques trop grands
-        valid_masks = []
+        # Mettre à jour les masques persistants
+        updated_masks = []
         for mask in masks:
-            if np.sum(mask) < max_area:
-                valid_masks.append(mask)
+            # Calculer le centre et la taille du nouveau masque
+            mask_center = np.mean(np.argwhere(mask), axis=0)
+            mask_size = np.sum(mask)  # Taille du masque en pixels actifs
 
-        # Combiner les masques pour créer une région d'exclusion
-        exclusion_mask = np.zeros_like(current_frame_gray, dtype=np.uint8)
-        for mask in valid_masks:
-            exclusion_mask = cv2.bitwise_or(exclusion_mask, mask.astype(np.uint8) * 255)
+            # Filtrer les masques trop grands
+            if mask_size > 500:  # Ajustez ce seuil pour votre cas
+                continue
 
-        # Liste des centres détectés dans la frame actuelle
-        detected_centers = []
+            mask_persistent = False
 
-        for contour in contours:
-            if cv2.contourArea(contour) > 2:  # Filtrer les petits objets
-                x, y, w, h = cv2.boundingRect(contour)
-                center = get_center(x, y, w, h)
+            # Comparer avec les masques persistants
+            for prev_mask, prev_center in persistent_masks:
+                distance = np.linalg.norm(mask_center - prev_center)
+                if distance < 20:  # Seuil de déplacement
+                    updated_masks.append((mask, mask_center))
+                    mask_persistent = True
+                    break
 
-                # Vérifier si le centre est dans une zone exclue
-                if exclusion_mask[center[1], center[0]] == 0:
-                    detected_centers.append(center)
+            # Si le masque est nouveau, l'ajouter
+            if not mask_persistent:
+                updated_masks.append((mask, mask_center))
 
-        # Mettre à jour les objets existants
-        for obj_id, data in list(objects.items()):
-            # Chercher le centre le plus proche
-            if detected_centers:
-                distances = [euclidean_distance(data["position"], center) for center in detected_centers]
-                min_distance = min(distances)
-                if min_distance < 60:  # Distance maximale pour associer un objet
-                    # Associer l'objet au centre détecté
-                    closest_center = detected_centers.pop(distances.index(min_distance))
-                    objects[obj_id]["position"] = closest_center
-                    objects[obj_id]["disappearance"] = 0
-                    objects[obj_id]["trajectory"].append(closest_center)
-                    if len(objects[obj_id]["trajectory"]) > trajectory_length:
-                        objects[obj_id]["trajectory"].pop(0)
-                    continue
+        persistent_masks = updated_masks
 
-            # Si aucun centre détecté proche, incrémenter le compteur de disparition
-            objects[obj_id]["disappearance"] += 1
-            if objects[obj_id]["disappearance"] > max_disappearance:
-                del objects[obj_id]
+    # Combiner les masques persistants
+    combined_mask = np.zeros_like(gray_frame)
+    for mask, _ in persistent_masks:
+        combined_mask = np.maximum(combined_mask, mask)
 
-        # Ajouter de nouveaux objets pour les centres restants
-        for center in detected_centers:
-            objects[next_object_id] = {
-                "position": center,
-                "disappearance": 0,
-                "trajectory": [center],
-            }
-            next_object_id += 1
+    # Superposer le masque sur la vidéo
+    mask_bgr = cv2.cvtColor(combined_mask.astype(np.uint8) * 255, cv2.COLOR_GRAY2BGR)
+    segmented_frame = cv2.addWeighted(frame, 0.7, mask_bgr, 0.3, 0)
 
-        # Dessiner les trajectoires et les objets
-        display_frame = current_frame.copy()
-        for obj_id, data in objects.items():
-            # Dessiner la trajectoire
-            for i in range(1, len(data["trajectory"])):
-                cv2.line(display_frame, data["trajectory"][i - 1], data["trajectory"][i], (0, 0, 255), 2)
+    # Afficher la vidéo en temps réel
+    cv2.imshow("Segmentation persistante", segmented_frame)
 
-            # Dessiner la position actuelle
-            cv2.circle(display_frame, data["position"], 5, (0, 255, 0), -1)
-
-        # Afficher la frame avec les mouvements détectés
-        cv2.imshow("Tracking avec SAM", display_frame)
-        out.write(display_frame)
+    # Sauvegarder la vidéo segmentée
+    out.write(segmented_frame)
 
     # Quitter avec la touche 'q'
-    if cv2.waitKey(30) & 0xFF == ord('q'):
+    if cv2.waitKey(1) & 0xFF == ord('q'):
         break
+
+    # Mettre à jour la frame précédente
+    prev_frame = blurred_frame
 
 # Libérer les ressources
 cap.release()
