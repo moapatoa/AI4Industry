@@ -101,7 +101,8 @@ def find2MainCircle(image_mat: np.ndarray, blur_ratio=21, *, verbose: bool = Fal
         cv2.imshow('Detected Circles', image2)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
-
+    
+    return output_circle
 
 if __name__ == '__main__':
     find2MainCircle_fromPath('./Images/frame_P1_24H_03.png', blur_ratio, verbose=True)
